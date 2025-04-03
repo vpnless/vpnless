@@ -1,0 +1,82 @@
+# Transmission + qBittorrent for vpnless (Caddy docker-proxy) + Homepage label discovery.
+#
+# Required environment variables (no defaults — set in Portainer stack env or a `.env` file):
+#   TRANSMISSION_USER, TRANSMISSION_PASS  — Transmission Web UI / RPC credentials
+#   TRANSMISSION_HOSTNAME, QBITTORRENT_HOSTNAME — hostnames for reverse proxy (e.g. transmission.example.com)
+#
+# Prerequisites:
+# - External network `vpnless` (same as Homepage/Caddy stack).
+# - DNS for the hostnames above must point at your vpnless edge.
+#
+# Transmission Web UI / RPC listens on container port 9091 (linuxserver image).
+# PEERPORT (e.g. 40101) is the BitTorrent listen port, not the HTTP UI — proxy 9091.
+# Optional: map host 40100 -> UI with "40100:9091" if you want LAN access on :40100.
+---
+services:
+  transmission:
+    image: ghcr.io/linuxserver/transmission:4.0.6
+    container_name: transmission
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Etc/UTC
+      TRANSMISSION_WEB_HOME: ""
+      USER: ${TRANSMISSION_USER}
+      PASS: ${TRANSMISSION_PASS}
+      PEERPORT: "40101"
+    volumes:
+      - /appdata/Transmission:/config
+      - /data:/data
+    ports:
+      - "9091:9091"
+      - "40101:40101"
+      - "40101:40101/udp"
+    restart: unless-stopped
+    networks:
+      - vpnless
+    labels:
+      diun.enable: "true"
+      caddy: ${TRANSMISSION_HOSTNAME}
+      caddy.reverse_proxy: "{{upstreams 9091}}"
+      caddy.vpnless: ""
+      homepage.group: Downloads
+      homepage.name: Transmission
+      homepage.icon: transmission
+      homepage.href: https://${TRANSMISSION_HOSTNAME}
+      homepage.description: Transmission BitTorrent Client
+
+  qbittorrent:
+    image: ghcr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      DOCKER_MODS: linuxserver/mods:universal-stdout-logs
+      LOGS_TO_STDOUT: /config/qBittorrent/logs/qbittorrent.log
+      PUID: "998"
+      PGID: "997"
+      TZ: Etc/UTC
+      WEBUI_PORT: "40200"
+      TORRENTING_PORT: "40201"
+    volumes:
+      - /appdata/qbittorrent:/config
+      - /data:/data
+    ports:
+      - "40200:40200"
+      - "40201:40201"
+      - "40201:40201/udp"
+    restart: unless-stopped
+    networks:
+      - vpnless
+    labels:
+      diun.enable: "true"
+      caddy: ${QBITTORRENT_HOSTNAME}
+      caddy.reverse_proxy: "{{upstreams 40200}}"
+      caddy.vpnless: ""
+      homepage.group: Downloads
+      homepage.name: qBittorrent
+      homepage.icon: qbittorrent
+      homepage.href: https://${QBITTORRENT_HOSTNAME}
+      homepage.description: qBittorrent
+
+networks:
+  vpnless:
+    external: true

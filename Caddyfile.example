@@ -1,0 +1,51 @@
+# Minimal - only approval_basic_auth is required.
+# Defaults: storage_path ./vpnless.db, pairing_path /vpnless/pair,
+#          approval_path /vpnless/admin, cookie_name device_auth_token,
+#          cookie_domain auto-derived from request host (override with cookie_domain)
+#          admin_trust_duration 12h
+#          rate_limit_pairing 20/1m, rate_limit_approval 10/1m
+localhost {
+    device_auth {
+        approval_basic_auth YOUR-ADMIN-USER:YOUR-RANDOM-ADMIN-PASS
+        # admin_trust_duration 12h
+    }
+
+    respond "Hello, authenticated user!"
+}
+
+# Override defaults when needed (single host)
+example.com {
+    device_auth {
+        storage_path /var/lib/caddy/vpnless.db
+        approval_basic_auth YOUR-ADMIN-USER:YOUR-RANDOM-ADMIN-PASS
+        cookie_domain example.com
+        approval_ip_whitelist 192.168.1.100
+    }
+
+    reverse_proxy localhost:8080
+}
+
+# Same login across app.foo.example.com, app.bar.example.com, etc.:
+# use the same storage_path everywhere and set cookie_domain to the shared parent.
+# app.foo.example.com {
+#     device_auth {
+#         storage_path /var/lib/caddy/vpnless.db
+#         cookie_domain example.com
+#         approval_basic_auth YOUR-ADMIN-USER:YOUR-RANDOM-ADMIN-PASS
+#     }
+#     reverse_proxy localhost:8080
+# }
+
+# Custom rate limits (optional; defaults shown)
+# rate_limit_pairing 20/1m   - 20 requests/min per IP for /vpnless/pair and /vpnless/pair/api
+# rate_limit_approval 10/1m  - 10 requests/min per IP for approval endpoints
+# Use "off" to disable: rate_limit_pairing off
+site1.example.com {
+    device_auth {
+        approval_basic_auth YOUR-ADMIN-USER:YOUR-RANDOM-ADMIN-PASS
+        rate_limit_pairing 30/1m
+        rate_limit_approval 5/1m
+    }
+
+    reverse_proxy localhost:8081
+}

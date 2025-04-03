@@ -1,0 +1,54 @@
+# Jellyfin for vpnless (Caddy docker-proxy) + Homepage.
+#
+# Required environment variables (set in Portainer stack env or a `.env` file):
+#   JELLYFIN_PUBLIC_HOST — hostname for Caddy/Homepage and JELLYFIN_PublishedServerUrl (e.g. jellyfin.example.com)
+#
+# NOTE: Hardware decoding in the stock linuxserver image may be finicky (e.g. clinfo
+# / Mesa / iHD in-container). That is separate from reverse-proxy wiring — see Intel
+# / VAAPI docs and linuxserver Jellyfin README if you need GPU transcode.
+#
+# Prerequisites: external network `vpnless`. DNS for JELLYFIN_PUBLIC_HOST must point at your edge.
+# JELLYFIN_PublishedServerUrl is set to https://${JELLYFIN_PUBLIC_HOST} so clients discover the correct URL behind the proxy.
+---
+name: jellyfin
+
+services:
+  jellyfin:
+    image: ghcr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    environment:
+      PUID: ${JELLYFIN_PUID:-998}
+      PGID: ${JELLYFIN_PGID:-997}
+      TZ: ${JELLYFIN_TZ:-Asia/Ho_Chi_Minh}
+      JELLYFIN_PublishedServerUrl: https://${JELLYFIN_PUBLIC_HOST}
+      LIBVA_DRIVER_NAME: ${JELLYFIN_LIBVA_DRIVER_NAME:-iHD}
+      RENDER_DEVICE: ${JELLYFIN_RENDER_DEVICE:-/dev/dri/renderD128}
+    volumes:
+      - ${JELLYFIN_CONFIG:-/appdata/Jellyfin/config}:/config
+      - ${JELLYFIN_MEDIA:-/data/Plex}:/data
+      - ${JELLYFIN_YT:-/data/Plex/yt}:/yt:ro
+    devices:
+      - ${JELLYFIN_DRI_MOUNT:-/dev/dri}:/dev/dri
+    ports:
+      - "${JELLYFIN_HTTP_PORT:-8096}:8096"
+      - "${JELLYFIN_HTTPS_PORT:-8920}:8920"
+      - "${JELLYFIN_DISCOVERY_UDP:-7359}:7359/udp"
+    group_add:
+      - "${JELLYFIN_RENDER_GID:-109}"
+    restart: unless-stopped
+    networks:
+      - vpnless
+    labels:
+      diun.enable: "true"
+      caddy: ${JELLYFIN_PUBLIC_HOST}
+      caddy.reverse_proxy: "{{upstreams ${JELLYFIN_HTTP_PORT:-8096}}}"
+      caddy.vpnless: ""
+      homepage.group: ${JELLYFIN_HOMEPAGE_GROUP:-Media}
+      homepage.name: ${JELLYFIN_HOMEPAGE_NAME:-Jellyfin}
+      homepage.icon: ${JELLYFIN_HOMEPAGE_ICON:-jellyfin}
+      homepage.href: https://${JELLYFIN_PUBLIC_HOST}
+      homepage.description: ${JELLYFIN_HOMEPAGE_DESCRIPTION:-Media server}
+
+networks:
+  vpnless:
+    external: true

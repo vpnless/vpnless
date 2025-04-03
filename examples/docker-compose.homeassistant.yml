@@ -1,0 +1,79 @@
+# Home Assistant + Mosquitto for vpnless (Caddy docker-proxy) + Homepage.
+#
+# Required environment variables (set in Portainer stack env or a `.env` file):
+#   HOMEASSISTANT_PUBLIC_HOST — hostname for Caddy/Homepage (e.g. homeassistant.example.com)
+#
+# Why not network_mode: host here? Caddy reaches backends on the Docker bridge.
+# Host networking hides the container from normal ingress networks, so
+# caddy.reverse_proxy "{{upstreams 8123}}" won't work the same way. Use the
+# external `vpnless` network like your other stacks.
+#
+# Reverse proxy (fixes "400 Bad Request" through Caddy): Home Assistant rejects
+# requests until it trusts the proxy subnet. It is NOT fixed by a Docker hostname env.
+#
+# Add to /config/configuration.yaml (merge with existing keys; restart HA):
+#
+#   http:
+#     use_x_forwarded_for: true
+#     trusted_proxies:
+#       - 127.0.0.1
+#       - 172.22.0.0/16   # docker network "vpnless" (run: docker network inspect vpnless)
+#
+#   homeassistant:
+#     external_url: https://YOUR_PUBLIC_HOST   # match HOMEASSISTANT_PUBLIC_HOST
+#     internal_url: http://homeassistant:8123
+#
+# UI alternative: Settings → System → Network (trusted proxies / URLs), depending on HA version.
+# Docs: https://www.home-assistant.io/integrations/http/#reverse-proxies
+#
+# DNS for HOMEASSISTANT_PUBLIC_HOST must point at your vpnless edge.
+---
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:latest
+    privileged: true
+    restart: unless-stopped
+    environment:
+      TZ: Etc/UTC
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /appdata/HomeAssistant/config:/config
+      - /appdata/HomeAssistant/root:/root
+      - /appdata/HomeAssistant/data:/data
+      - /appdata/HomeAssistant/share:/share
+      - /appdata/HomeAssistant/backup:/backup
+    ports:
+      - "8123:8123"
+    networks:
+      - vpnless
+    labels:
+      diun.enable: "true"
+      caddy: ${HOMEASSISTANT_PUBLIC_HOST}
+      caddy.reverse_proxy: "{{upstreams 8123}}"
+      caddy.vpnless: ""
+      homepage.group: Smart Home
+      homepage.name: Home Assistant
+      homepage.icon: home-assistant
+      homepage.href: https://${HOMEASSISTANT_PUBLIC_HOST}
+      homepage.description: Home Assistant
+
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    restart: unless-stopped
+    volumes:
+      # Host layout: mqtt/config/mosquitto.conf, mqtt/data, mqtt/log (create if needed).
+      - /appdata/HomeAssistant/mqtt:/mosquitto
+    ports:
+      - "1883:1883"
+      - "1884:1884"
+      - "8883:8883"
+      - "8884:8884"
+      - "9001:9001"
+    networks:
+      - vpnless
+    labels:
+      diun.enable: "true"
+
+networks:
+  vpnless:
+    external: true

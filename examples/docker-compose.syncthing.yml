@@ -1,0 +1,50 @@
+# Syncthing for vpnless (Caddy docker-proxy) + Homepage.
+#
+# Required environment variables (set in Portainer stack env or a `.env` file):
+#   SYNCTHING_PUBLIC_HOST — hostname for Caddy/Homepage (e.g. syncthing.example.com)
+#
+# This is an example stack using a single /data mount for simplicity.
+# DNS for SYNCTHING_PUBLIC_HOST must point at your vpnless edge.
+---
+name: syncthing
+
+services:
+  syncthing:
+    image: syncthing/syncthing:latest
+    container_name: syncthing
+    hostname: syncthing
+    restart: unless-stopped
+    cap_add:
+      - CHOWN
+      - FOWNER
+    ports:
+      # Web UI
+      - 8384
+      # Sync protocol
+      - 22000:22000/tcp
+      - 22000:22000/udp
+      # Local discovery
+      - 21027:21027/udp
+    volumes:
+      # Persist Syncthing config and device identity
+      - /appdata/SyncThing:/var/syncthing/config
+      # Example data mount (single path for docs/examples)
+      - /data:/data
+    environment:
+      SYNCTHING_AUTOUPGRADE: "${SYNCTHING_AUTOUPGRADE:-false}"
+    networks:
+      - vpnless
+    labels:
+      diun.enable: "true"
+      caddy: ${SYNCTHING_PUBLIC_HOST}
+      caddy.reverse_proxy: "{{upstreams 8384}}"
+      caddy.vpnless: ""
+      homepage.group: Infrastructure
+      homepage.name: Syncthing
+      homepage.icon: syncthing
+      homepage.href: https://${SYNCTHING_PUBLIC_HOST}
+      homepage.description: Peer to Peer File synchronization
+
+networks:
+  vpnless:
+    external: true

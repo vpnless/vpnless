@@ -1,0 +1,75 @@
+# --- Binaries (project / local builds) ---
+/caddy
+/vpnless
+/vpnless-caddy
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# --- Go ---
+*.test
+*.out
+vendor/
+go.work
+
+# --- Local device store / DB (runtime) ---
+/Caddyfile
+authorized_devices.json
+vpnless.db
+vpnless.db-shm
+vpnless.db-wal
+authorized_devices.db
+authorized_devices.db-shm
+authorized_devices.db-wal
+frpc.ini
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.json.bak
+
+# --- IDEs & editors (keep machine-specific junk out of git) ---
+.idea/
+*.iml
+.vscode/
+.fleet/
+.cursor/
+*.swp
+*.swo
+*.swn
+*~
+*.un~
+.projections.json
+
+# --- OS noise ---
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.directory
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# --- Generated / CI / temp ---
+**/build/
+dist/
+coverage/
+tmp/
+
+# --- Local tooling (large SDKs; not for the repo) ---
+/.android-sdk/
+/.local-tools/
+/.tooling/
+
+/vpnless
+/vpnless-caddy
+/caddy
+**/bin/
+**/obj/

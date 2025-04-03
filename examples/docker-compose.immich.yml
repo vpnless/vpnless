@@ -1,0 +1,97 @@
+# Immich stack for vpnless (Caddy docker-proxy) + Homepage.
+#
+# Required environment variables (set in Portainer stack env or a `.env` file):
+#   IMMICH_PUBLIC_HOST — hostname for Caddy/Homepage (e.g. immich.example.com)
+#   DB_PASSWORD — Postgres and Immich DB credentials (no default; set a strong value)
+#
+# Other compose substitutions use ${VAR:-default} where noted for paths/ports.
+# Override in `.env` or Portainer for production.
+#
+# Defaults assume /data/Immich for media + postgres under /data/Immich/postgres,
+# and Intel/VA DRI devices from the original template.
+#
+# Reference: https://docs.immich.app/install/docker-compose
+---
+name: immich
+
+services:
+  immich-server:
+    container_name: immich_server
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    ports:
+      - "${IMMICH_HTTP_PORT:-2283}:2283"
+    environment:
+      DB_HOSTNAME: ${DB_HOSTNAME:-database}
+      DB_USERNAME: ${DB_USERNAME:-immich}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE_NAME: ${DB_DATABASE_NAME:-immich}
+      REDIS_HOSTNAME: ${REDIS_HOSTNAME:-redis}
+    group_add:
+      - "${IMMICH_RENDER_GID:-109}"
+    volumes:
+      - ${UPLOAD_LOCATION:-/data/Immich}:/data
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      - redis
+      - database
+    restart: always
+    networks:
+      - default
+      - vpnless
+    labels:
+      diun.enable: "true"
+      caddy: ${IMMICH_PUBLIC_HOST}
+      caddy.reverse_proxy: "{{upstreams ${IMMICH_HTTP_PORT:-2283}}}"
+      caddy.vpnless: ""
+      homepage.group: ${IMMICH_HOMEPAGE_GROUP:-Media}
+      homepage.name: ${IMMICH_HOMEPAGE_NAME:-Immich}
+      homepage.icon: ${IMMICH_HOMEPAGE_ICON:-immich}
+      homepage.href: https://${IMMICH_PUBLIC_HOST}
+      homepage.description: ${IMMICH_HOMEPAGE_DESCRIPTION:-Photos and videos}
+    healthcheck:
+      disable: false
+
+  immich-machine-learning:
+    container_name: immich_machine_learning
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}-openvino
+    environment:
+      DB_HOSTNAME: ${DB_HOSTNAME:-database}
+      DB_USERNAME: ${DB_USERNAME:-immich}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE_NAME: ${DB_DATABASE_NAME:-immich}
+      REDIS_HOSTNAME: ${REDIS_HOSTNAME:-redis}
+    group_add:
+      - "${IMMICH_RENDER_GID:-109}"
+    volumes:
+      - model-cache:/cache
+    depends_on:
+      - database
+      - redis
+    restart: always
+
+  redis:
+    container_name: immich_redis
+    image: docker.io/valkey/valkey:8@sha256:81db6d39e1bba3b3ff32bd3a1b19a6d69690f94a3954ec131277b9a26b95b3aa
+    healthcheck:
+      test: redis-cli ping || exit 1
+    restart: always
+
+  database:
+    container_name: immich_postgres
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USERNAME:-immich}
+      POSTGRES_DB: ${DB_DATABASE_NAME:-immich}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - ${DB_DATA_LOCATION:-/data/Immich/postgres}:/var/lib/postgresql/data
+    shm_size: 128mb
+    restart: always
+
+networks:
+  vpnless:
+    external: true
+
+volumes:
+  model-cache:

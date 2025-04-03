@@ -1,0 +1,225 @@
+# VPNLess TODO
+
+~~Make a Chrome and Firefox browser toolbar to show the vpnless status of the current site... Configure your vpnless base domain, and show a prominent warning if ever using a site on that domain that isn't using vpnless... If vpnless is in use, show a nice "happy sign" of some type.~~
+
+
+## Guiding Principles
+
+- No separate VPN client software layer, no additional helper apps
+- Easy enough for kids and grandparents to use
+- Easy for parents to admin
+- Secure defaults, easy first run.
+- Keep setup boring: one DNS record, one compose path, minimal config.
+
+
+## Before announcing
+
+- Pairing/approval/auth flows are stable and test-covered.
+- Upgrade availability is obvious in admin and notifications.
+
+## Priority Roadmap
+
+- Add admin action to revoke all active sessions.
+- Add import/export/backup guidance in admin and docs.
+
+2) Deny reason visibility
+- Surface explicit auth decision reasons in logs and admin UI:
+  - pending device
+  - invalid signature
+  - stale/invalid timestamp
+  - unknown device
+  - invalid session proof
+
+3) Test foundation
+- Expand tests for:
+  - happy path pairing -> approval -> access
+  - denied path and replay attempts
+  - restart/persistence behavior
+  - concurrent approvals and race conditions
+  - malformed storage handling
+
+4) Basic health and diagnostics
+- Add `/health` endpoint (or equivalent) for quick status checks.
+- Add structured logs for auth decisions and admin actions.
+
+### Admin UX + Domain Strategy + Notification Backbone
+
+1) Admin UX improvements (`/admin` and approval dashboard)
+- Improve pending/authorized device views and timestamps
+- Add clearer action confirmations and error states
+- Improve mobile responsiveness for admin pages
+
+2) Notification event model
+- Introduce internal event types:
+  - `upgrade_available`
+  - `device_pending_approval`
+  - `device_approved`
+  - `device_denied`
+  - `security_suspicious_attempt`
+- Centralize event emission so all channels share one source.
+
+3) *** Self-hosted notification channels ***
+- Implement notifications via:
+  - Gotify
+  - ntfy
+- Add retry/backoff and clear delivery error logging.
+- Add per-event channel toggles in config/admin.
+
+Gotify/ntfy actually fire on real events; subdomain-first writeup exists and matches what we ship.
+
+### Upgrade Experience (A) + Mobile Parity (4)
+
+1) Upgrade awareness (minimum required)
+- Prominently show current version + latest available version in admin.
+- Add visible `upgrade_available` status/banner.
+- Add notification integration for upgrade events (Gotify/ntfy).
+
+2) Upgrade mechanics (safe first)
+- Start with non-destructive upgrade workflow:
+  - check for updates
+  - fetch release metadata/changelog
+  - provide one-click or one-command guided update path
+- Keep automatic in-place upgrade behind explicit opt-in.
+- Always create backup/snapshot before any automatic upgrade step.
+- How to handle DB schema changes/migrations
+
+3) Mobile app parity with web admin
+- Define parity checklist by capability (not just UI screens):
+  - list pending/authorized devices
+  - approve/deny device
+  - revoke device/session
+  - view audit/log entries
+  - notification settings
+- Close the highest-impact gaps first.
+
+### More integrations + Docs/Video + Dogfood Hardening
+
+1) APK Client app integrations (5)
+- Complete integrations for:
+  - Immich
+  - Jellyfin (still need jellyfintv)
+  - Home Assistant
+
+2) Setup docs and launch media (6)
+- Write a zero-to-working quickstart with one DNS record path.
+- Add troubleshooting cookbook for common failures.
+- Produce short demo video focused on "HTTPS everywhere, docker only config, no vpn client"
+
+3) Dogfood and break testing (7 expanded)
+- Run at-home real-world soak test.
+- Add failure-injection tests (storage corruption, bad clocks, restart storms).
+
+## New Feature Track: Automated Upgrades + Optional Email (A)
+
+### Phase A1 (Now): Notify-only
+- Detect newer stable releases.
+- Show in admin dashboard and send via Gotify/ntfy.
+- Include changelog summary and urgency level.
+
+### Phase A2: Guided upgrade
+- Download verification metadata/checksums.
+- Provide guided in-place upgrade command/path with backup first.
+- Add rollback instructions and one-click backup restore where feasible.
+
+### Phase A3 (Opt-in automation)
+- Optional auto-download and optional scheduled auto-apply.
+- Safety gates:
+  - backup successful
+  - health checks pass
+  - lock to stable channel unless explicitly changed
+
+### Phase A4 (Longer term): DUIN-style integration
+- Evaluate embedded update daemon approach.
+- Reuse notification/event system.
+- Keep full manual override and disable toggle.
+
+### Optional opt-in email updates
+- Strictly opt-in; off by default.
+- Double-confirm consent and easy unsubscribe.
+- Use only for release/update notices (no spam).
+
+## Notification Channels
+
+Required channels now:
+- Gotify
+- ntfy
+
+Implementation notes:
+- Shared notification abstraction (`notifier` interface).
+- Channel-specific config validation and test send.
+- Per-event routing (e.g., security alerts -> high priority channel).
+- Delivery audit trail in admin logs.
+
+## Fingerprint based Device Posture Score (Risk Signal, Not Primary Auth)
+
+Purpose:
+
+Inputs (weighted and configurable):
+- Browser fingerprint snapshot (canvas/font/render traits and related browser signals).
+- User-agent/platform changes.
+- IP/network reputation and geo/ASN drift.
+- Session and auth anomaly patterns (failed proof bursts, unusual request timing).
+
+Scoring and rebuild period:
+- Recompute score every 24 hours per active device/session.
+- Force immediate recompute on high-signal events:
+  - new IP/ASN/country
+  - major browser/user-agent change
+  - repeated failed proof/signature checks
+- Keep a rolling 14-day history for trend-based risk decisions.
+
+Actions by score band:
+- Low risk: normal operation.
+- Medium risk: shorten session lifetime and notify admin.
+- High risk: trigger step-up re-auth/re-approval flow (no silent lockout).
+
+Operator controls:
+- Toggle posture feature on/off globally.
+- Configure thresholds and rebuild cadence.
+- Allow trusted-device override for noisy but known-safe clients.
+
+## API Token Exception Path (No JS Requirement)
+
+Requirement:
+- API tokens must be able to authenticate without browser JS/session proof flow.
+
+Plan:
+- Add explicit token mode:
+  - `strict` (default): standard browser/device auth applies.
+  - `token_bypass_js`: valid API tokens bypass JS-dependent posture/session checks.
+- Keep token scope/permissions explicit and minimal.
+- Enforce token TTL, rotation, and revoke endpoints.
+- Require audit logging for every token-authenticated request.
+- Optional per-route policy to allow token bypass only on API paths.
+
+Security guardrails:
+- Token bypass does not disable rate limits, IP controls, or audit logging.
+- Support optional binding constraints (CIDR, route scope, expiry).
+- Expose token usage insights in admin UI (last used, source IP, failures).
+
+## Cross-Cutting Work Items
+
+- Rate limiting for pairing/admin endpoints.
+- Session/device lifecycle controls (expiry, revoke inactive).
+- Compatibility matrix (DNS providers, browsers, NAS/home-server setups).
+- `vpnless doctor` command for preflight checks:
+  - DNS
+  - ports 80/443
+  - clock skew
+  - storage permissions
+- **`vpnless-doctor` / reverse-proxy hardening checks** (validate operators did not expose backends by mistake):
+  - Parse effective Caddy / compose config (or read documented “expected layout”) and flag **published ports** on app containers (e.g. Jellyfin/Immich) that bypass the VPNLess listener.
+  - From an **external network vantage** (or optional user-supplied probe host), attempt to reach **backend ports/URLs** that must not be internet-routable; report FAIL if reachable.
+  - Verify **only** the VPNLess reverse proxy terminates TLS / owns 80/443 on the public side (where that applies).
+  - Check that **internal service URLs** in docs match “proxy-only” access (no direct `https://jellyfin:8096` style exposure in client-facing instructions).
+  - Optional: **`vpnless-doctor --json`** for CI / hooks; exit non-zero on high-severity findings.
+  - Document remediation strings (bind to Docker network only, firewall, drop published ports, etc.).
+- Release checklist and changelog discipline.
+
+## Why VPNless Exists - Fix user pain
+
+1) TLS/cert renewals randomly break → watch renewals
+2) Weird config/labels for simple routing → opinionated Docker-first path; hide Caddyfile when we can.
+3) Errors are useless (`502`, TLS noise) → surface real reasons in admin + logs.
+4) No idea if it’s healthy until someone screams → `/health`, admin status, Gotify/ntfy on bad stuff.
+5) Security is binary and brittle → posture as a hint + step-up
